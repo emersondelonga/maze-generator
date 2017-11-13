@@ -1,254 +1,172 @@
-/*********************************************************************************
-*File: Maze.java
-*Author: Onur Ozuduru
-*   e-mail: onur.ozuduru { at } gmail.com
-*   github: github.com/onurozuduru
-*   twitter: twitter.com/OnurOzuduru
-*
-*License: The MIT License (MIT)
-*
-*   Copyright (c) 2016 Onur Ozuduru
-*   Permission is hereby granted, free of charge, to any person obtaining a copy
-*   of this software and associated documentation files (the "Software"), to deal
-*   in the Software without restriction, including without limitation the rights
-*   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-*   copies of the Software, and to permit persons to whom the Software is
-*   furnished to do so, subject to the following conditions:
-*  
-*   The above copyright notice and this permission notice shall be included in all
-*   copies or substantial portions of the Software.
-*  
-*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-*   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-*   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-*   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-*   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-*   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-*   SOFTWARE.
-*********************************************************************************/
+import static java.lang.System.*;
+import java.util.Scanner;
+import java.io.File;
+import java.lang.Exception;
+public class Maze
+{
+    private Cell[][] board;
+    private final int DELAY = 1;
+    private int prevRow = 0;
+    private int prevCol = 0;
 
-package com.ozuduru.mazegenerator;
+    public Maze(int rows, int cols, int[][] map){
+        StdDraw.setXscale(0, cols);
+        StdDraw.setYscale(0, rows);
+        board = new Cell[rows][cols];
+        //grab number of rows to invert grid system with StdDraw (lower-left, instead of top-left)
+        int height = board.length - 1;
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++) {
+                board[r][c] = map[r][c] == 1 ? new Cell(c , height - r, 0.5, false) : new Cell(c, height - r, 0.5, true);
+            }
+    }
 
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.HeadlessException;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.util.ArrayList;
-import java.util.Stack;
+    public void draw()
+    {
+        for (int r = 0; r < board.length; r++)
+            for (int c = 0; c < board[r].length; c++){
+                Cell cell = board[r][c];
+                StdDraw.setPenColor(cell.getColor());
+                StdDraw.filledSquare(cell.getX(), cell.getY(), cell.getRadius());
+            }
+            StdDraw.show();
+    }
 
-import javax.swing.JPanel;
-import javax.swing.Timer;
+    public boolean findPath(int row, int col) {
+        boolean isFinished = false;
 
-public class Maze extends JPanel {
-	protected final static int CELL_WIDTH = 10, CELL_HEIGHT = 10;
-	protected final static int REFRESH_TIME = 60;
-	protected static int WIDTH, HEIGHT; // Initilized by constructer.
-	protected static int BOUNDS_X, BOUNDS_Y; // Initilized by constructer.
-	
-	private Stack<Cell> stack;
-	private ArrayList<Cell> unvisitedCells;
-	private ArrayList<Cell> container;
-	public ArrayList<Cell> path;
-	private Cell start, finish, current;
-	protected boolean isGenerated;
-	private Timer simulationTimer;
+        if (isValid(row, col)) {
+            board[row][col].visitCell();
+            board[prevRow][prevCol].setColor(StdDraw.RED);
+            board[row][col].setColor(StdDraw.BLUE);
+            prevRow = row;
+            prevCol = col;
 
-	public Maze(int bX, int bY) throws HeadlessException {
-		setBOUNDS_X(bX);
-		setBOUNDS_Y(bY);
-		
-		WIDTH = BOUNDS_X * CELL_WIDTH;
-		HEIGHT = BOUNDS_Y * CELL_HEIGHT;
-		
-		this.stack = new Stack<Cell>();
-		this.container = new ArrayList<Cell>();
-		this.unvisitedCells = new ArrayList<Cell>();
-		this.path = new ArrayList<Cell>();
-		
-		this.setCells();
-		this.setLayout(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		this.setPreferredSize(new Dimension(Maze.WIDTH, Maze.HEIGHT));
-		
-		for(Cell c : this.container)
-			this.add(c);
-		this.isGenerated = false;
-	}
-	
-	private void setCells() {
-		int limit = Maze.BOUNDS_X * Maze.BOUNDS_Y;
-		
-		for(int i = 0; i <  limit; ++i) {
-			int x = i % Maze.BOUNDS_X;
-			int y = i / Maze.BOUNDS_X;
-			int oddOrEven = ((i / Maze.BOUNDS_X) % 2 == 0) ? 0 : 1;
-			
-			if(y % 2 == 1)
-				this.container.add(new Wall(x, y));
-			else if(i % 2 == oddOrEven) {
-				Cell c = new Cell(x, y, Status.UNVISITED);
-				this.container.add(c);
-				this.unvisitedCells.add(c);
-			}
-			else
-				this.container.add(new Wall(x, y));
-		}
-	}
-	
-	public static void setBOUNDS_X(int bOUNDS_X) {
-		BOUNDS_X = bOUNDS_X;
-	}
+            this.draw();
+            StdDraw.pause(DELAY);
 
-	public static void setBOUNDS_Y(int bOUNDS_Y) {
-		BOUNDS_Y = bOUNDS_Y;
-	}
+            if(isExit(row, col))
+            {
+                board[row][col].becomePath();
+                isFinished = true;
+            }
 
-	public void generate() {
-		current = unvisitedCells.remove(getRandomInt(unvisitedCells.size()));
-		current.setStatus(Status.VISITED);
-		finish = null;
-		start = current;
-		
-		while(!this.unvisitedCells.isEmpty()) {
-			if(unvisitedCells.size() == 1)
-				finish = unvisitedCells.get(0);
-			
-			Cell unvisited = this.chooseRandomUnvisitedNeighbour(current);
-			
-			if(unvisited != null) {
-				this.stack.push(current);
-				this.theWallBetween(current, unvisited).removeMe();
-				current = unvisited;
-				current.setStatus(Status.VISITED);
-				this.unvisitedCells.remove(current);
-			}
-			else if(!this.stack.isEmpty()) {
-				current = this.stack.pop();
-			}
-			else {
-				current = this.unvisitedCells.remove(getRandomInt(unvisitedCells.size()));
-				current.setStatus(Status.VISITED);
-			}
-		}
-		isGenerated = true;
-		start.setBackground(Color.GREEN);
-		finish.setBackground(Color.RED);
-	}
-	
-	public Timer generateAndSimulate() {
-		current = unvisitedCells.remove(getRandomInt(unvisitedCells.size()));
-		current.setStatus(Status.VISITED);
-		finish = null;
-		start = current;
-		
-		simulationTimer = new Timer(Maze.REFRESH_TIME, new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				repaint();
-				if(!unvisitedCells.isEmpty()) {
-					if(unvisitedCells.size() == 1)
-						finish = unvisitedCells.get(0);
-					Cell unvisited = chooseRandomUnvisitedNeighbour(current);
-					
-					if(unvisited != null) {
-						stack.push(current);
-						theWallBetween(current, unvisited).removeMe();
-						current = unvisited;
-						current.setStatus(Status.VISITED);
-						unvisitedCells.remove(current);
-					}
-					else if(!stack.isEmpty()) {
-						current = stack.pop();
-					}
-					else {
-						current = unvisitedCells.remove(getRandomInt(unvisitedCells.size()));
-						current.setStatus(Status.VISITED);
-					}
-				}
-				else {
-					isGenerated = true;
-					simulationTimer.stop();
-					start.setBackground(Color.GREEN);
-					finish.setBackground(Color.RED);
-				}
-			}//END OF Method actionPerformed
-		});
-		return simulationTimer;
-	}
-	
-	public void drawPath() {
-		if(!isGenerated)
-			return;
-		Cell c2 = null;
-		Cell c1 = stack.pop();
-		
-		c1.setBackground(Color.YELLOW);
-		this.theWallBetween(c1, finish).setBackground(Color.YELLOW);
-		
-		while(!stack.isEmpty()) {
-			if(c2 != null)
-				this.theWallBetween(c1, c2).setBackground(Color.YELLOW);
-			if(stack.isEmpty())
-				break;
-			c2 = stack.pop();
-			
-			c1.setBackground(Color.YELLOW);
-			c2.setBackground(Color.YELLOW);
-			this.theWallBetween(c1, c2).setBackground(Color.YELLOW);
-			
-			if(!stack.isEmpty())
-				c1 = stack.pop();
-		}
-		start.setBackground(Color.GREEN);
-		finish.setBackground(Color.RED);
-	}
-	
-	public Cell chooseRandomUnvisitedNeighbour(Cell c) {
-		ArrayList<Cell> n = this.findUnvisitedNeighbours(c);
-		
-		if(n.isEmpty())
-			return null;
-		return n.get(getRandomInt(n.size()));
-	}
-	
-	public ArrayList<Cell> findUnvisitedNeighbours(Cell c) {
-		ArrayList<Cell> ret = new ArrayList<Cell>();
-		ArrayList<Position> pos = c.getNeighboursPositions();
-		
-		for(Position p : pos) {
-			Cell neighbour = this.container.get(this.getIndexOfCell(c.get_X() + p.x, c.get_Y() + p.y));
-			if(!neighbour.isVisited())
-				ret.add(neighbour);
-		}
-		return ret;
-	}
-	
-	public int getRandomInt(int limit) {
-		return (int) (System.currentTimeMillis() % limit);
-	}
-	
-	public Wall theWallBetween(Cell c1, Cell c2) {		
-		int x = c1.get_X() - c2.get_X();
-		int y = c1.get_Y() - c2.get_Y();
-		
-		if(x != 0 && y != 0)
-			return null;
-		x = c2.get_X() + (x / 2);
-		y = c2.get_Y() + (y / 2);
-		
-		return (Wall) this.container.get(getIndexOfCell(x, y));
-	}
-	
-	private int getIndexOfCell(int x, int y) {
-		return (BOUNDS_X * y) + x;
-	}
+            if (!isFinished) {
+                isFinished = findPath(row + 1, col);
+                if (!isFinished)
+                    isFinished = findPath(row, col + 1);
+                if (!isFinished)
+                    isFinished = findPath(row, col - 1);
+                if (!isFinished)
+                    isFinished = findPath(row - 1, col);
+            }
+        }
+        if(isFinished)
+        {
+            board[row][col].becomePath();
+        }
+            return isFinished;
+    }
 
-	public ArrayList<Cell> getContainer() {		
-		return container;
-	}
-	
-	public Timer getSimulationTimer() {
-		return this.simulationTimer;
-	}
+    private boolean isValid(int row, int col)
+    {
+        //ensure that (row, col) is a valid location in grid
+        if (row >= 0 && row < board.length && col >= 0 && col < board[row].length) {
+            if (board[row][col].isWall() || board[row][col].isVisited())
+                return false;
+            else
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isExit(int row, int col)
+    {
+        if (row == board.length - 1 && col == board[row].length - 1)
+            return true;
+        else
+            return false;
+    }
+    public static int[][] readMaze() throws Exception {
+        int size = 10;
+        String[][] dataSet = new String[size][size];
+        int[][] numSet = new int[size][size];
+        String fileName = "Workbook1";
+        String extension = ".csv";
+        File inputFile = new File(fileName + extension);
+        Scanner inputObject = new Scanner(inputFile);
+        //inputObject.useDelimiter(",");
+        //System.out.println("delim is:" + inputObject.delimiter());
+        int row = 0;
+        // process the entire file, with a loop
+        // populate your data structures
+        while (inputObject.hasNextLine() == true) {
+            dataSet[row] = (inputObject.nextLine()).split(",");
+            row++;
+        }
+        for (int r = 0; r < dataSet.length; r++) {
+            for (int c = 0; c < dataSet[0].length; c++) {
+                dataSet[r][c] = dataSet[r][c].trim();
+                System.out.println(dataSet[r][c]);
+                numSet[r][c] = Integer.parseInt(dataSet[r][c].trim());
+            }
+            System.out.println();
+        }
+        inputObject.close();
+        return numSet;
+
+    }
+    public static int[][] generateMaze(int size, double prob) {
+        int maze[][] = new int[size][size];
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 1; j++) {
+                maze[i][j] = 1;
+            }
+        }
+        for (int i = 2; i < size - 1; i += 2) {
+            for (int j = 1; j < size - 1; j++) {
+                maze[i][j] = 0;
+            }
+        }
+        for (int i = 1; i < size - 1; i++) {
+            for (int j = 1; j < size - 2; j += 2) {
+                maze[i][j] = 0;
+            }
+        }
+        for (int i = 2; i < size - 1; i+= 2) {
+            for (int j = 1; j < size - 1; j+=1) {
+                if(maze[i][j] == 0)
+                {
+                    if((int)(Math.random()*prob) > 0)
+                    maze[i][j] = 1;
+                }
+            }
+        }
+        maze[0][0] = 1;
+        maze[0][1] = 1;
+        maze[0][2] = 1;
+        maze[0][3] = 1;
+        maze[1][0] = 1;
+        maze[1][1] = 1;
+        maze[1][2] = 1;
+        maze[1][3] = 1;
+        maze[size - 1][size - 1] = 1;
+        maze[size - 1][size - 2] = 1;
+        maze[size - 2][size - 1] = 1;
+        maze[size - 2][size - 2] = 1;
+        maze[size - 3][size - 1] = 1;
+        maze[size - 3][size - 2] = 1;
+        maze[size - 4][size - 1] = 1;
+        maze[size - 4][size - 2] = 1;
+        return maze;
+    }
+
+    public static void main(String[] args) throws Exception{
+        StdDraw.enableDoubleBuffering();
+        int[][] maze = generateMaze(100,3.5);
+        Maze geerid = new Maze(maze.length, maze[0].length, maze);
+        geerid.draw();
+        geerid.findPath(0, 0);
+        geerid.draw();
+    }
 }
